@@ -444,9 +444,34 @@ fn day12() -> Result<(), Box<dyn std::error::Error + 'static>> {
         } else {
             graph[e[0]].borrow_mut().push(e[1]);
         }
+        if !graph.contains_key(e[1]) {
+            graph.insert(e[1], RefCell::new(vec![e[0]]));
+        } else {
+            graph[e[1]].borrow_mut().push(e[0]);
+        }
     });
-    println!("{:?}", graph);
-    let mut stack: Vec<&str> = vec!["start"];
+    fn dfs<'a>(path: &RefCell<Vec<&'a str>>, graph: &HashMap<&str, RefCell<Vec<&'a str>>>) {
+        if path.borrow().is_empty() {
+            return;
+        }
+        let cur = *path.borrow().last().unwrap();
+        if cur == "end" {
+            println!("{:?}", path);
+        } else if graph.contains_key(cur) {
+            for next in graph[cur].borrow().iter() {
+                if (next.to_lowercase() == *next
+                    && path.borrow().iter().position(|n| n == next).is_none())
+                    || next.to_uppercase() == *next
+                {
+                    path.borrow_mut().push(next);
+                    dfs(path, graph);
+                }
+            }
+        }
+        path.borrow_mut().pop();
+    }
+    let path: RefCell<Vec<&str>> = RefCell::new(vec!["start"]);
+    dfs(&path, &graph);
     Ok(())
 }
 
