@@ -475,6 +475,89 @@ fn day12() -> Result<(), Box<dyn std::error::Error + 'static>> {
     Ok(())
 }
 
+fn day13() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    let content = fs::read_to_string("src/input/day13.txt")?;
+    let parts: Vec<&str> = content.trim().split("\n\n").collect();
+    let mut w: usize = 0;
+    let mut h: usize = 0;
+    let dots: Vec<Vec<usize>> = parts[0]
+        .trim()
+        .split("\n")
+        .map(|r| {
+            let v: Vec<usize> = r.split(",").map(|n| n.parse().unwrap()).collect();
+            w = if v[0] > w { v[0] } else { w };
+            h = if v[1] > h { v[1] } else { h };
+            v
+        })
+        .collect();
+    let mut board = vec![vec![0; w + 1]; h + 1];
+    dots.iter().for_each(|d| board[d[1]][d[0]] = 1);
+
+    #[derive(Debug)]
+    enum Op {
+        FoldX(usize),
+        FoldY(usize),
+    }
+    let insts: Vec<Op> = parts[1]
+        .trim()
+        .split("\n")
+        .map(|r| {
+            let parts: Vec<&str> = r.trim().split("=").collect();
+            if parts[0] == "fold along x" {
+                Op::FoldX(parts[1].parse().unwrap())
+            } else {
+                Op::FoldY(parts[1].parse().unwrap())
+            }
+        })
+        .collect();
+
+    insts.iter().for_each(|op| match op {
+        Op::FoldX(x) => {
+            (0..h + 1).for_each(|i| {
+                let (mut l, mut r) = (*x as i32 - 1, x + 1);
+                while l >= 0 && r <= w {
+                    let j = l as usize;
+                    board[i][j] = if (board[i][j] + board[i][r]) >= 1 {
+                        1
+                    } else {
+                        0
+                    };
+                    board[i][r] = 0;
+                    l -= 1;
+                    r += 1;
+                }
+            });
+            w = x - 1;
+        }
+        Op::FoldY(y) => {
+            (0..w + 1).for_each(|j| {
+                let (mut u, mut b) = (*y as i32 - 1, y + 1);
+                while u >= 0 && b <= h {
+                    let i = u as usize;
+                    board[i][j] = if (board[i][j] + board[b][j]) >= 1 {
+                        1
+                    } else {
+                        0
+                    };
+                    board[b][j] = 0;
+                    u -= 1;
+                    b += 1;
+                }
+            });
+            h = y - 1;
+        }
+    });
+    let ans = board.iter().flatten().filter(|&&v| v > 0).count();
+    println!("{:?}", ans);
+    (0..h + 1).for_each(|i| {
+        (0..w + 1).for_each(|j| {
+            print!("{}", if board[i][j] == 1 { "###" } else { "..." });
+        });
+        println!();
+    });
+    Ok(())
+}
+
 fn main() {
     assert!(day01().is_ok());
     assert!(day02().is_ok());
@@ -488,4 +571,5 @@ fn main() {
     assert!(day10().is_ok());
     assert!(day11().is_ok());
     assert!(day12().is_ok());
+    assert!(day13().is_ok());
 }
