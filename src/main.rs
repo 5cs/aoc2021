@@ -418,17 +418,6 @@ fn day11() -> Result<(), Box<dyn std::error::Error + 'static>> {
             }
         }
         ans += flashes.len();
-        // println!();
-        // (0..h).for_each(|i| {
-        //     (0..w).for_each(|j| {
-        //         if flashes.contains(&(i, j)) {
-        //             print!("0 ");
-        //         } else {
-        //             print!("{:?} ", octs[i as usize][j as usize]);
-        //         }
-        //     });
-        //     println!();
-        // });
     });
     println!("{:?}", ans);
     Ok(())
@@ -456,7 +445,7 @@ fn day12() -> Result<(), Box<dyn std::error::Error + 'static>> {
         }
         let cur = *path.borrow().last().unwrap();
         if cur == "end" {
-            println!("{:?}", path);
+            //println!("{:?}", path);
         } else if graph.contains_key(cur) {
             for next in graph[cur].borrow().iter() {
                 if (next.to_lowercase() == *next
@@ -558,6 +547,78 @@ fn day13() -> Result<(), Box<dyn std::error::Error + 'static>> {
     Ok(())
 }
 
+fn day14() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    let content = fs::read_to_string("src/input/day14.txt")?;
+    let parts: Vec<&str> = content.trim().split("\n\n").collect();
+    let template = parts[0].trim().to_owned();
+    let insts: HashMap<&str, (String, String)> = parts[1]
+        .trim()
+        .split("\n")
+        .map(|r| {
+            let v: Vec<&str> = r.trim().split(" -> ").collect();
+            (
+                v[0],
+                (v[0][..1].to_owned() + v[1], v[1].to_owned() + &v[0][1..]),
+            )
+        })
+        .collect();
+
+    fn inc_by(counter: &mut HashMap<String, i64>, key: &str, val: i64) {
+        match counter.get_mut(key) {
+            Some(v) => {
+                *v += val;
+            }
+            None => {
+                counter.insert(key.to_string(), val);
+            }
+        }
+    }
+    let mut round: HashMap<String, i64> = HashMap::new();
+    template
+        .split("")
+        .filter(|e| e.len() != 0)
+        .collect::<Vec<&str>>()
+        .windows(2)
+        .map(|w| w.iter().fold("".to_string(), |acc, n| acc + n))
+        .collect::<Vec<String>>()
+        .iter()
+        .for_each(|e| inc_by(&mut round, e, 1));
+    (1..41).for_each(|_| {
+        let mut next_round: HashMap<String, i64> = HashMap::new();
+        for i in round.iter() {
+            let (p0, p1) = insts.get(&i.0[..]).unwrap();
+            inc_by(&mut next_round, p0, round[i.0]);
+            inc_by(&mut next_round, p1, round[i.0]);
+        }
+        round = next_round;
+    });
+
+    let mut counter: HashMap<String, i64> = HashMap::new();
+    for e in round.iter() {
+        inc_by(&mut counter, &e.0[..1], round[e.0]);
+        inc_by(&mut counter, &e.0[1..], round[e.0]);
+    }
+
+    fn handle_first_last_char(template: &str, pair: (&String, &i64)) -> i64 {
+        let len = template.len();
+        let mut ans = *pair.1;
+        ans += if &template[..1] == pair.0 { 1 } else { 0 };
+        ans += if &template[len - 1..] == pair.0 { 1 } else { 0 };
+        ans / 2
+    }
+    let most = handle_first_last_char(
+        &template,
+        counter.iter().max_by(|x, y| x.1.cmp(&y.1)).unwrap(),
+    );
+    let least = handle_first_last_char(
+        &template,
+        counter.iter().min_by(|x, y| x.1.cmp(&y.1)).unwrap(),
+    );
+
+    println!("{:?}", most - least);
+    Ok(())
+}
+
 fn main() {
     assert!(day01().is_ok());
     assert!(day02().is_ok());
@@ -572,4 +633,5 @@ fn main() {
     assert!(day11().is_ok());
     assert!(day12().is_ok());
     assert!(day13().is_ok());
+    assert!(day14().is_ok());
 }
