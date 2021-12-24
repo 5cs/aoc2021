@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::cmp;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -619,6 +620,43 @@ fn day14() -> Result<(), Box<dyn std::error::Error + 'static>> {
     Ok(())
 }
 
+fn day15() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    let content = fs::read_to_string("src/input/day15.txt")?;
+    let board: Vec<Vec<i64>> = content
+        .trim()
+        .split("\n")
+        .map(|r| {
+            r.trim()
+                .split("")
+                .filter(|v| v.len() != 0)
+                .map(|v| v.parse().unwrap())
+                .collect()
+        })
+        .collect();
+    const TIMES: usize = 5;
+    let (w, h) = (board[0].len(), board.len());
+    let mut ans = vec![0; w * TIMES];
+    fn pos_val(board: &Vec<Vec<i64>>, i: usize, j: usize) -> i64 {
+        let (w, h) = (board[0].len(), board.len());
+        let val = board[i % h][j % w] + (i / h) as i64 + (j / w) as i64;
+        val % 10 + val / 10
+    }
+    (1..w * TIMES).for_each(|j| {
+        ans[j] = ans[j - 1] + pos_val(&board, 0, j);
+    });
+    (1..h * TIMES).for_each(|i| {
+        ans[0] += pos_val(&board, i, 0);
+        (1..w * TIMES).for_each(|j| {
+            ans[j] = cmp::min(
+                ans[j] + pos_val(&board, i, j),
+                ans[j - 1] + pos_val(&board, i, j),
+            );
+        });
+    });
+    println!("{:?}", ans[w * TIMES - 1]);
+    Ok(())
+}
+
 fn main() {
     assert!(day01().is_ok());
     assert!(day02().is_ok());
@@ -634,4 +672,5 @@ fn main() {
     assert!(day12().is_ok());
     assert!(day13().is_ok());
     assert!(day14().is_ok());
+    assert!(day15().is_ok());
 }
