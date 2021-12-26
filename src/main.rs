@@ -441,28 +441,41 @@ fn day12() -> Result<(), Box<dyn std::error::Error + 'static>> {
             graph[e[1]].borrow_mut().push(e[0]);
         }
     });
-    fn dfs<'a>(path: &RefCell<Vec<&'a str>>, graph: &HashMap<&str, RefCell<Vec<&'a str>>>) {
+    fn dfs<'a>(
+        path: &RefCell<Vec<&'a str>>,
+        graph: &HashMap<&str, RefCell<Vec<&'a str>>>,
+        used: bool,
+    ) -> i64 {
         if path.borrow().is_empty() {
-            return;
+            return 0;
         }
+        let mut num = 0;
         let cur = *path.borrow().last().unwrap();
         if cur == "end" {
-            //println!("{:?}", path);
+            num = 1;
         } else if graph.contains_key(cur) {
             for next in graph[cur].borrow().iter() {
-                if (next.to_lowercase() == *next
-                    && path.borrow().iter().position(|n| n == next).is_none())
-                    || next.to_uppercase() == *next
+                if next == &"start" {
+                    continue;
+                }
+                if next.to_uppercase() == *next
+                    || path.borrow().iter().position(|c| c == next).is_none()
                 {
                     path.borrow_mut().push(next);
-                    dfs(path, graph);
+                    num += dfs(path, graph, used);
+                } else if !used {
+                    path.borrow_mut().push(next);
+                    num += dfs(path, graph, true);
                 }
             }
         }
         path.borrow_mut().pop();
+        num
     }
+    let part = 2;
     let path: RefCell<Vec<&str>> = RefCell::new(vec!["start"]);
-    dfs(&path, &graph);
+    let ans = dfs(&path, &graph, if part == 1 { true } else { false });
+    println!("{}", ans);
     Ok(())
 }
 
