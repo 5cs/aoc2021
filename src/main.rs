@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fs;
+use std::u8;
 
 fn day01() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let ans = fs::read_to_string("src/input/day01.txt")?
@@ -657,6 +658,198 @@ fn day15() -> Result<(), Box<dyn std::error::Error + 'static>> {
     Ok(())
 }
 
+fn day16() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    let content = fs::read_to_string("src/input/day16.txt")?;
+    let bytes: Vec<u8> = content
+        .trim()
+        .split("")
+        .filter(|b| b.len() != 0)
+        .map(|b| u8::from_str_radix(b, 16).unwrap())
+        .collect();
+    // bytes.iter().for_each(|b| print!("{:#06b}", b));
+
+    #[derive(Debug)]
+    struct Parser<'a> {
+        bytes: &'a Vec<u8>,
+        id: usize,
+        off: usize,
+        ver: u128,
+    }
+
+    #[derive(Debug)]
+    enum Expr {
+        Sum,
+        Product,
+        Min,
+        Max,
+        Gt,
+        Lt,
+        Eq,
+        Num(u128),
+        List(Vec<Expr>),
+    }
+
+    impl<'a> Parser<'a> {
+        fn position(&self) -> usize {
+            self.id * 4 + self.off
+        }
+
+        fn recv_bits(&mut self, n: usize) -> Vec<u8> {
+            let mut bytes: Vec<u8>;
+            // inclusive bit range [first:first_off, last:last_off]
+            let first_bit_id = self.id * 4 + self.off;
+            let last_bit_id = first_bit_id + n - 1;
+            let (first, first_off) = (self.id, self.off);
+            let (last, last_off) = (last_bit_id / 4, last_bit_id % 4);
+            // bytes which contains the bit range we need
+            bytes = (&self.bytes[first..last + 1]).to_vec();
+            // remove leading out of range bits
+            bytes[0] &= (1 << (4 - first_off)) - 1;
+            // bytewise shift bits backward
+            let mut i = bytes.len() - 1;
+            while last_off != 3 && i >= 1 {
+                bytes[i] = ((bytes[i - 1] & ((1 << (4 - last_off - 1)) - 1)) << (last_off + 1))
+                    + (bytes[i] >> (4 - last_off - 1));
+                i -= 1;
+            }
+            bytes[0] >>= 4 - last_off - 1;
+            // update inner state to next unparsed bit's position
+            self.id = last + (last_off + 1) / 4;
+            self.off = (last_off + 1) % 4;
+            bytes
+        }
+        fn bytes_to_num(bytes: &Vec<u8>) -> u128 {
+            bytes
+                .iter()
+                .zip((0..bytes.len()).rev())
+                .map(|(x, i)| (*x as u128) << 4 * i)
+                .sum()
+        }
+        fn recv_bytes_as_num(&mut self, num: usize) -> u128 {
+            let bytes = self.recv_bits(num);
+            Parser::bytes_to_num(&bytes)
+        }
+        fn recv_ver(&mut self) -> u128 {
+            self.recv_bytes_as_num(3)
+        }
+        fn recv_typ(&mut self) -> u128 {
+            self.recv_bytes_as_num(3)
+        }
+        fn recv_len_typ(&mut self) -> u128 {
+            self.recv_bytes_as_num(1)
+        }
+        fn recv_len(&mut self) -> u128 {
+            self.recv_bytes_as_num(15)
+        }
+        fn recv_num(&mut self) -> u128 {
+            self.recv_bytes_as_num(11)
+        }
+
+        fn parse_literal(&mut self) -> Expr {
+            let mut val_bytes: Vec<u8> = Vec::new();
+            loop {
+                let is_last_group = self.recv_bits(1)[0] == 0;
+                let bytes = self.recv_bits(4);
+                val_bytes.push(Parser::bytes_to_num(&bytes) as u8);
+                if is_last_group {
+                    break;
+                }
+            }
+            Expr::Num(Parser::bytes_to_num(&val_bytes))
+        }
+
+        pub fn parse_packet(&mut self) -> Expr {
+            let ver = self.recv_ver();
+            let typ = self.recv_typ();
+            self.ver += ver;
+            if typ == 4 {
+                // literal number
+                self.parse_literal()
+            } else {
+                // sub-packets
+                let mut exprs: Vec<Expr> = Vec::new();
+                let op = match typ {
+                    0 => Expr::Sum,
+                    1 => Expr::Product,
+                    2 => Expr::Min,
+                    3 => Expr::Max,
+                    5 => Expr::Gt,
+                    6 => Expr::Lt,
+                    7 => Expr::Eq,
+                    _ => unreachable!(),
+                };
+                exprs.push(op);
+
+                let len_typ = self.recv_len_typ();
+                if len_typ == 0 {
+                    let len = self.recv_len();
+                    let start = self.position();
+                    loop {
+                        if self.position() - start >= len as usize {
+                            break;
+                        }
+                        exprs.push(self.parse_packet());
+                    }
+                } else {
+                    let num = self.recv_num();
+                    for _ in 0..num {
+                        exprs.push(self.parse_packet());
+                    }
+                }
+
+                Expr::List(exprs)
+            }
+        }
+    }
+
+    impl Expr {
+        fn eval(&self) -> u128 {
+            use Expr::*;
+            match self {
+                Num(v) => *v,
+                List(v) => {
+                    let op = &v[0];
+                    let mut nums: Vec<u128> = Vec::new();
+                    for e in &v[1..] {
+                        nums.push(e.eval());
+                    }
+                    let v = match op {
+                        Sum => nums.iter().fold(0, |acc, n| acc + n),
+                        Product => nums.iter().fold(1, |acc, n| acc * n),
+                        Min => *nums.iter().min().unwrap(),
+                        Max => *nums.iter().max().unwrap(),
+                        Gt => {
+                            let v = if nums[0] > nums[1] { 1 } else { 0 };
+                            v
+                        }
+                        Lt => {
+                            let v = if nums[0] < nums[1] { 1 } else { 0 };
+                            v
+                        }
+                        Eq => {
+                            let v = if nums[0] == nums[1] { 1 } else { 0 };
+                            v
+                        }
+                        _ => unreachable!(),
+                    };
+                    v
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    let mut parser = Parser {
+        bytes: &bytes,
+        id: 0,
+        off: 0,
+        ver: 0,
+    };
+    let expr = parser.parse_packet();
+    println!("{} {}", parser.ver, expr.eval());
+    Ok(())
+}
+
 fn main() {
     assert!(day01().is_ok());
     assert!(day02().is_ok());
@@ -673,4 +866,5 @@ fn main() {
     assert!(day13().is_ok());
     assert!(day14().is_ok());
     assert!(day15().is_ok());
+    assert!(day16().is_ok());
 }
