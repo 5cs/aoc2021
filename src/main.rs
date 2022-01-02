@@ -3,6 +3,7 @@ use std::cmp;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
+use std::f64;
 use std::fs;
 use std::u8;
 
@@ -472,7 +473,7 @@ fn day12() -> Result<(), Box<dyn std::error::Error + 'static>> {
         path.borrow_mut().pop();
         num
     }
-    let part = 2;
+    let part = 1;
     let path: RefCell<Vec<&str>> = RefCell::new(vec!["start"]);
     let ans = dfs(&path, &graph, if part == 1 { true } else { false });
     println!("{}", ans);
@@ -863,6 +864,92 @@ fn day16() -> Result<(), Box<dyn std::error::Error + 'static>> {
     Ok(())
 }
 
+fn day17() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    let content = fs::read_to_string("src/input/day17.txt")?;
+    let xy: Vec<(i32, i32)> = content[content.find(":").unwrap() + 1..]
+        .trim()
+        .split(", ")
+        .map(|v| {
+            let range: Vec<i32> = v[2..].split("..").map(|v| v.parse().unwrap()).collect();
+            (range[0], range[1])
+        })
+        .collect();
+    let (x, y) = (xy[0], xy[1]);
+
+    // when vy >= 0, it must go through (x, 0) point, and at this point
+    // the vy' speed is -vy, and max abs(-vy) is cmp::max(y.0.abs(), y.1.abs()).
+    let highest = if y.0 == 0 || y.1 == 0 || (y.0 < 0 && y.1 > 0) {
+        f64::INFINITY
+    } else {
+        let h = cmp::max(y.0.abs(), y.1.abs());
+        ((h - 1) * h / 2) as f64
+    };
+
+    // speeds of vx which becomes zero in range [l,u]
+    fn zero_x((l, u): (i32, i32)) -> Vec<i32> {
+        let mut v: Vec<i32> = Vec::new();
+        let mut s = 1;
+        loop {
+            if s * (s + 1) / 2 > u {
+                break;
+            }
+            if s * (s + 1) / 2 >= l {
+                v.push(s);
+            }
+            s += 1;
+        }
+        v
+    }
+
+    // s seconds later, x in [l, u], and speed >= 0
+    fn valid_vx(s: i32, (l, u): (i32, i32)) -> Vec<i32> {
+        // v*s - s*(s-1)/2 in [l, u]
+        let vs = (l + s * (s - 1) / 2, u + s * (s - 1) / 2);
+        let v = (vs.0 / s + if vs.0 % s != 0 { 1 } else { 0 }, vs.1 / s);
+        (v.0..v.1 + 1).filter(|&v| v >= s - 1).collect()
+    }
+
+    // s seconds later, y in [l, u]
+    fn valid_vy(s: i32, (l, u): (i32, i32)) -> Vec<i32> {
+        let vs = (l + s * (s - 1) / 2, u + s * (s - 1) / 2);
+        let v = (
+            vs.0 / s + if vs.0 % s != 0 && vs.0 > 0 { 1 } else { 0 },
+            vs.1 / s - if vs.1 % s != 0 && vs.1 < 0 { 1 } else { 0 },
+        );
+        (v.0..v.1 + 1).collect()
+    }
+
+    let mut speeds = HashSet::new();
+    let vx_zero = zero_x(x);
+    let mut s = 1;
+    loop {
+        let mut vx = valid_vx(s, x);
+        // larger vy will exceed range of y axis
+        if s > 2 * cmp::max(y.0.abs(), y.1.abs()) {
+            break;
+        }
+        let vy = valid_vy(s, y);
+        if vy.len() != 0 {
+            if vx.len() < vx_zero.len() {
+                // round to zero speed at x axis
+                vx = vx_zero.to_vec();
+            }
+            for x in vx.iter() {
+                for y in vy.iter() {
+                    if speeds.contains(&(*x, *y)) {
+                        continue;
+                    }
+                    speeds.insert((*x, *y));
+                }
+            }
+        }
+        s += 1;
+    }
+
+    println!("{:.0} {}", highest, speeds.len());
+    Ok(())
+}
+
 fn main() {
     assert!(day01().is_ok());
     assert!(day02().is_ok());
@@ -880,4 +967,5 @@ fn main() {
     assert!(day14().is_ok());
     assert!(day15().is_ok());
     assert!(day16().is_ok());
+    assert!(day17().is_ok());
 }
