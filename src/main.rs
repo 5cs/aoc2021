@@ -950,6 +950,254 @@ fn day17() -> Result<(), Box<dyn std::error::Error + 'static>> {
     Ok(())
 }
 
+fn day18() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    #[derive(Debug)]
+    struct Node {
+        val: i32,
+        left: *mut Node,
+        right: *mut Node,
+        parent: *mut Node,
+    }
+    impl Node {
+        fn new(val: i32) -> *mut Self {
+            Box::into_raw(Box::new(Node {
+                val,
+                left: std::ptr::null_mut(),
+                right: std::ptr::null_mut(),
+                parent: std::ptr::null_mut(),
+            }))
+        }
+    }
+    fn to_tree(tokens: &mut Vec<&str>) -> *mut Node {
+        let token = tokens.get(0).unwrap().to_owned();
+        tokens.drain(0..1);
+        if token == "[" {
+            let mut root: *mut Node = Node::new(-1);
+            let mut subtrees: Vec<*mut Node> = Vec::new();
+            while tokens.get(0).unwrap() != &"]" {
+                subtrees.push(to_tree(tokens));
+            }
+            assert!(subtrees.len() == 2);
+            tokens.drain(0..1);
+            unsafe {
+                (*root).left = subtrees[0];
+                (*root).right = subtrees[1];
+                (*subtrees[0]).parent = root;
+                (*subtrees[1]).parent = root;
+            }
+            root
+        } else {
+            Node::new(token.parse::<i32>().unwrap())
+        }
+    }
+    fn left_helper(root: *mut Node) -> *mut Node {
+        unsafe {
+            if (*root).left.is_null() && (*root).right.is_null() {
+                return root;
+            }
+            if !(*root).right.is_null() {
+                return left_helper((*root).right);
+            }
+            if !(*root).left.is_null() {
+                return left_helper((*root).left);
+            }
+        }
+        std::ptr::null_mut()
+    }
+    fn left_pos(mut root: *mut Node, mut parent: *mut Node) -> *mut Node {
+        unsafe {
+            while !root.is_null() && ((*root).left == parent || (*root).left.is_null()) {
+                parent = root;
+                root = (*root).parent;
+            }
+            if !root.is_null() && !(*root).left.is_null() {
+                return left_helper((*root).left);
+            }
+        }
+        std::ptr::null_mut()
+    }
+    fn right_helper(root: *mut Node) -> *mut Node {
+        unsafe {
+            if (*root).left.is_null() && (*root).right.is_null() {
+                return root;
+            }
+            if !(*root).left.is_null() {
+                return right_helper((*root).left);
+            }
+            if !(*root).right.is_null() {
+                return right_helper((*root).right);
+            }
+        }
+        std::ptr::null_mut()
+    }
+    fn right_pos(mut root: *mut Node, mut parent: *mut Node) -> *mut Node {
+        unsafe {
+            while !root.is_null() && ((*root).right == parent || (*root).right.is_null()) {
+                parent = root;
+                root = (*root).parent;
+            }
+            if !root.is_null() && !(*root).right.is_null() {
+                return right_helper((*root).right);
+            }
+        }
+        std::ptr::null_mut()
+    }
+    fn explode(root: *mut Node, height: i32, mut done: bool) -> bool {
+        unsafe {
+            if !done && !(*root).left.is_null() {
+                done = explode((*root).left, height + 1, done);
+            }
+            if !done && height > 4 {
+                let mut parent = (*root).parent;
+                let mut left = left_pos((*parent).parent, parent);
+                let mut right = right_pos((*parent).parent, parent);
+                if !left.is_null() {
+                    (*left).val += (*(*parent).left).val;
+                }
+                if !(right.is_null()) {
+                    (*right).val += (*(*parent).right).val;
+                }
+                (*parent).val = 0;
+                (*parent).left = std::ptr::null_mut();
+                (*parent).right = std::ptr::null_mut();
+                done = true;
+            }
+            if !done && !(*root).right.is_null() {
+                done = explode((*root).right, height + 1, done);
+            }
+        }
+        done
+    }
+    fn split(root: *mut Node, mut done: bool) -> bool {
+        unsafe {
+            if !done && !(*root).left.is_null() {
+                done = split((*root).left, done);
+            }
+            if !done && (*root).val >= 10 {
+                let mut left = Node::new((*root).val / 2);
+                let mut right =
+                    Node::new((*root).val / 2 + if (*root).val % 2 != 0 { 1 } else { 0 });
+                (*left).parent = root;
+                (*right).parent = root;
+                (*root).val = -1;
+                (*root).left = left;
+                (*root).right = right;
+                done = true;
+            }
+            if !done && !(*root).right.is_null() {
+                done = split((*root).right, done);
+            }
+        }
+        done
+    }
+    fn magnitude(root: *const Node) -> i32 {
+        let (mut left, mut right) = (0, 0);
+        unsafe {
+            if !(*root).left.is_null() {
+                left = magnitude((*root).left);
+            }
+            if !(*root).right.is_null() {
+                right = magnitude((*root).right);
+            }
+            if (*root).left.is_null() && (*root).right.is_null() {
+                (*root).val
+            } else {
+                left * 3 + right * 2
+            }
+        }
+    }
+    fn reduce(root: *mut Node) {
+        loop {
+            if explode(root, 0, false) {
+                continue;
+            }
+            if !split(root, false) {
+                break;
+            }
+        }
+    }
+    fn combine(left: *mut Node, right: *mut Node) -> *mut Node {
+        unsafe {
+            let mut root = Node::new(-1);
+            (*root).left = left;
+            (*root).right = right;
+            (*left).parent = root;
+            (*right).parent = root;
+            root
+        }
+    }
+    fn tree_str(root: *const Node) -> String {
+        let mut left = "".to_string();
+        let mut right = "".to_string();
+        unsafe {
+            if !(*root).left.is_null() {
+                left = tree_str((*root).left);
+            }
+            if !(*root).right.is_null() {
+                right = tree_str((*root).right);
+            }
+            if (*root).left.is_null() && (*root).right.is_null() {
+                format!("{}", (*root).val)
+            } else {
+                format!("[{},{}]", left, right)
+            }
+        }
+    }
+    fn parse_line(line: &String) -> *mut Node {
+        let mut tokens = line
+            .split(" ")
+            .filter(|v| v.len() != 0 && v != &",")
+            .collect::<Vec<_>>();
+        to_tree(&mut tokens)
+    }
+    fn to_trees(lines: &Vec<String>) -> Vec<*mut Node> {
+        let mut roots: Vec<*mut Node> = Vec::new();
+        lines.iter().for_each(|s| {
+            roots.push(parse_line(s));
+        });
+        roots
+    }
+
+    let content = fs::read_to_string("src/input/day18.txt")?;
+    let lines = content
+        .split("\n")
+        .filter(|r| r.len() != 0)
+        .map(|r| {
+            r.to_string()
+                .replace("[", " [ ")
+                .replace("]", " ] ")
+                .replace(",", " , ")
+        })
+        .collect::<Vec<String>>();
+    let roots = to_trees(&lines);
+    let mut root = roots[0];
+    for i in 1..roots.len() {
+        let new_root = combine(root, roots[i]);
+        reduce(new_root);
+        root = new_root;
+    }
+
+    let mut max_magnitude = std::i32::MIN;
+    for i in 0..lines.len() {
+        for j in 0..lines.len() {
+            if i == j {
+                continue;
+            }
+            let left = parse_line(lines.get(i).unwrap());
+            let right = parse_line(lines.get(j).unwrap());
+            let new_root = combine(left, right);
+            reduce(new_root);
+            let m = magnitude(new_root);
+            if m > max_magnitude {
+                max_magnitude = m;
+            }
+        }
+    }
+
+    println!("{} {} {}", tree_str(root), magnitude(root), max_magnitude);
+    Ok(())
+}
+
 fn main() {
     assert!(day01().is_ok());
     assert!(day02().is_ok());
@@ -968,4 +1216,5 @@ fn main() {
     assert!(day15().is_ok());
     assert!(day16().is_ok());
     assert!(day17().is_ok());
+    assert!(day18().is_ok());
 }
